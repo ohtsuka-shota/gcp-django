@@ -1,54 +1,107 @@
+---
 resources:
-- name: cdm-vpc
+
+- name: cdm-vpc 
   type: compute.v1.network
   properties:
     autoCreateSubnetworks: false
 
 - name: cdm-public-subnet
-  type: compute.v1.subnetwork
+  type: compute.v1.subnetwork 
   properties:
     region: asia-northeast1
     network: $(ref.cdm-vpc.selfLink)
     ipCidrRange: 192.168.1.0/24
+
+- name: cdm-vpc-allow-http
+  type: compute.v1.firewall
+  properties:
+    network: $(ref.cdm-vpc.selfLink)
+    direction: INGRESS
+    priority: 1000
+    targetTags:
+    - http-server
+    allowed:
+    - IPProtocol: tcp
+      ports:
+      - 80
+    sourceRanges:
+    - 0.0.0.0/0
+
+- name: cdm-vpc-allow-health-check
+  type: compute.v1.firewall
+  properties:
+    network: $(ref.cdm-vpc.selfLink)
+    direction: INGRESS
+    priority: 1000
+    targetTags:
+    - lb-health-check
+    allowed:
+    - IPProtocol: tcp
+    sourceRanges:
+    - 35.191.0.0/16
+    - 130.211.0.0/22
+    - 209.85.152.0/22
+    - 209.85.204.0/22
+
+- name: cdm-vpc-allow-health-check-ipv6
+  type: compute.v1.firewall
+  properties:
+    network: $(ref.cdm-vpc.selfLink)
+    direction: INGRESS
+    priority: 1000
+    targetTags:
+    - lb-health-check
+    allowed:
+    - IPProtocol: tcp
+    sourceRanges:
+    - 2600:1901:8001::/48
+    - 2600:2d00:1:b029::/64
 
 - name: cdm-fw-rule
   type: compute.v1.firewall
   properties:
     name: allow-port
     network: $(ref.cdm-vpc.selfLink)
+    enabled: true
     sourceRanges:
-    - 0.0.0.0/0
+      - 0.0.0.0/0
     allowed:
-    - IPProtocol: ICMP
-    - IPProtocol: TCP
-      ports: ["22", "80", "443"]
+      - IPProtocol: ICMP
+      - IPProtocol: TCP
+        ports:
+          - "22"
+          - "80"
+          - "443"
 
 - name: cdm-vm-django
   type: compute.v1.instance
   properties:
     zone: asia-northeast1-a
     machineType: zones/asia-northeast1-a/machineTypes/e2-medium
+    tags:
+      items:
+        - http-server
+        - lb-health-check
     disks:
-    - deviceName: boot
-      type: PERSISTENT
-      boot: true
-      autoDelete: true
-      initializeParams:
-        sourceImage: 'projects/debian-cloud/global/images/family/debian-12'
+      - deviceName: boot
+        type: PERSISTENT
+        boot: true
+        autoDelete: true
+        initializeParams:
+          sourceImage: 'projects/debian-cloud/global/images/family/debian-12'
     networkInterfaces:
-    - network: $(ref.cdm-vpc.selfLink)
-      subnetwork: $(ref.cdm-public-subnet.selfLink)
-      accessConfigs:
-      - name: External NAT
-        type: ONE_TO_ONE_NAT
-        natIP: Ephemeral
+      - network: $(ref.cdm-vpc.selfLink)
+        subnetwork: $(ref.cdm-public-subnet.selfLink)
+        accessConfigs:
+          - name: External NAT
+            type: ONE_TO_ONE_NAT
     metadata:
       items:
-      - key: startup-script
-        value: |
-          #!/bin/bash
-          sudo su -
-          apt-get update
-          apt-get install -y apache2
-          systemctl start apache2
-          systemctl enable apache2
+        - key: startup-script
+          value: |
+            #!/bin/bash
+            apt-get update
+            apt-get install -y apache2
+            systemctl start apache2
+            systemctl enable apache2
